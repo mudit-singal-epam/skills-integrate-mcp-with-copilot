@@ -94,7 +94,7 @@ def require_teacher(token: str | None) -> tuple[str, str, int]:
                 cleanup_counter = 0
                 # Cleanup also happens inside lock to prevent multiple simultaneous cleanups
                 now = int(datetime.now(timezone.utc).timestamp())
-                expired = [j for j, e in revoked_tokens.items() if e < now]
+                expired = [j for j, e in revoked_tokens.items() if e <= now]
                 for j in expired:
                     del revoked_tokens[j]
             
