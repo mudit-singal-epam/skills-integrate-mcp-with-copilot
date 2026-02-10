@@ -400,7 +400,7 @@ def signup_for_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Sign up a student for an activity"""
-    _, _, _ = require_teacher(token)
+    require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -427,7 +427,7 @@ def unregister_from_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Unregister a student from an activity"""
-    _, _, _ = require_teacher(token)
+    require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
