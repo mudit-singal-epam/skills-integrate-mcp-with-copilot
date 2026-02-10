@@ -164,18 +164,29 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+# JWT Token Revocation Manager
+# Singleton class for tracking revoked tokens with automatic expiration cleanup
+#
+# Limitations:
+# - Uses in-memory storage (not shared across multiple worker processes)
+# - Revoked tokens are lost on application restart  
+# - Each worker process maintains its own revocation list
+#
+# For production multi-process deployments, consider:
+# - Redis with TTL support (recommended for horizontal scaling)
+# - Shared database with indexed expiration timestamps
+# - Distributed cache systems (Memcached, etc.)
+#
+# Thread-Safety:
+# - Singleton creation uses dedicated _instance_lock (one-time operation)
+# - Runtime operations use separate _tokens_lock (prevents creation contention)
+
 class TokenRevocationManager:
     """
-    Singleton class for managing JWT token revocation with automatic TTL-based cleanup.
+    Singleton for managing JWT token revocation with automatic TTL-based cleanup.
     
-    IMPORTANT: This implementation uses in-memory storage and is NOT suitable for 
-    multi-process deployments (e.g., multiple Uvicorn workers). For production use 
-    with multiple processes, integrate with a shared data store like Redis.
-    
-    Thread-Safety:
-    - Singleton instantiation uses a dedicated class-level lock (_instance_lock)
-    - Runtime operations use a separate instance-level lock (_tokens_lock)
-    - This separation prevents singleton creation from contending with runtime operations
+    IMPORTANT: In-memory storage only - not suitable for multi-process deployments.
+    See block comment above for limitations and production alternatives.
     """
     
     # Class-level attributes for singleton pattern
