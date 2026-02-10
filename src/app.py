@@ -12,12 +12,17 @@ from pydantic import BaseModel
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Dict
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Mount the static files directory
 current_dir = Path(__file__).parent
@@ -32,12 +37,30 @@ class LoginRequest(BaseModel):
 
 def load_teachers(path: Path) -> Dict[str, str]:
     if not path.exists():
+        logger.warning(
+            f"Teacher credentials file not found at {path}. "
+            "All teacher login attempts will fail. "
+            "Please create the file with valid teacher credentials to enable admin functionality."
+        )
         return {}
 
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-
-    return {entry["username"]: entry["password"] for entry in data}
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return {entry["username"]: entry["password"] for entry in data}
+    except json.JSONDecodeError as e:
+        logger.warning(
+            f"Teacher credentials file at {path} is malformed and cannot be parsed: {e}. "
+            "All teacher login attempts will fail. "
+            "Please fix the JSON syntax to enable admin functionality."
+        )
+        return {}
+    except Exception as e:
+        logger.warning(
+            f"Failed to load teacher credentials from {path}: {e}. "
+            "All teacher login attempts will fail."
+        )
+        return {}
 
 
 teachers_path = current_dir / "teachers.json"
