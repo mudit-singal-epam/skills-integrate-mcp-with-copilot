@@ -302,11 +302,11 @@ def login(request: LoginRequest):
     # timing attacks that could reveal information about the password.
     try:
         is_valid = pwd_context.verify(request.password, hash_to_verify)
-    except (ValueError, passlib_exc.UnknownHashError) as e:
+    except (ValueError, passlib_exc.UnknownHashError):
         # Handle malformed or non-bcrypt hashes in teachers.json
         # Log a warning if the stored hash is invalid (but not for dummy hash failures)
         if stored_password_hash:
-            logger.warning("Invalid password hash for user %s: %s", request.username, str(e))
+            logger.warning("Invalid password hash detected for user %s", request.username)
         is_valid = False
     
     # Only proceed if both username exists AND password is valid
