@@ -15,7 +15,6 @@ from passlib.context import CryptContext
 import json
 import os
 from pathlib import Path
-import secrets
 from typing import Dict
 
 app = FastAPI(title="Mergington High School API",
@@ -182,13 +181,20 @@ def login(request: LoginRequest):
     # Retrieve the stored password hash for the username
     stored_password_hash = teacher_credentials.get(request.username)
     
+    # Use a dummy hash for invalid usernames to prevent timing attacks
+    # This ensures pwd_context.verify() is always called, maintaining constant time
+    # regardless of whether the username exists. Without this, an attacker could
+    # measure response times to enumerate valid usernames.
+    dummy_hash = "$2b$12$YVp7allSvMoMAAfCeMBxy.5dAqb0StaIo8x/f2m8IhJm/zB8FVrbq"
+    hash_to_verify = stored_password_hash if stored_password_hash else dummy_hash
+    
     # Validate credentials using constant-time hash verification
-    # This protects against timing attacks by ensuring the verification time
-    # is independent of where the comparison fails. The verify() method:
-    # - Returns False if username doesn't exist (stored_password_hash is None)
-    # - Uses constant-time comparison to check the password hash
-    # - Prevents attackers from using response time to determine valid usernames
-    if not stored_password_hash or not pwd_context.verify(request.password, stored_password_hash):
+    # The verify() method uses constant-time comparison internally to prevent
+    # timing attacks that could reveal information about the password.
+    is_valid = pwd_context.verify(request.password, hash_to_verify)
+    
+    # Only proceed if both username exists AND password is valid
+    if not stored_password_hash or not is_valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Create JWT token with expiration
