@@ -59,10 +59,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # In-memory storage for revoked token JTIs with expiration times
 # In production, this should be stored in Redis or a database with TTL
-# Structure: {jti: expiration_timestamp}
+# Structure: {jti: expiration_timestamp} where expiration_timestamp is Unix epoch time in seconds
 revoked_tokens: Dict[str, int] = {}
 revoked_tokens_lock = threading.Lock()  # Thread-safe access to revoked_tokens
-cleanup_counter = 0  # Counter for periodic cleanup
+cleanup_counter = 0  # Counter for periodic cleanup (thread-safe via lock)
 
 
 def require_teacher(token: str | None) -> tuple[str, str, int]:
