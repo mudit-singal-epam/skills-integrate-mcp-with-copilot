@@ -15,8 +15,9 @@ import json
 import os
 import secrets
 import threading
+import random
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -74,8 +75,8 @@ def cleanup_expired_tokens():
             del revoked_tokens[jti]
 
 
-def require_teacher(token: str | None) -> tuple[str, str]:
-    """Validate JWT token and return (username, jti)."""
+def require_teacher(token: str | None) -> tuple[str, str, int]:
+    """Validate JWT token and return (username, jti, exp)."""
     if not token:
         raise HTTPException(status_code=401, detail="Teacher login required")
     
@@ -83,13 +84,14 @@ def require_teacher(token: str | None) -> tuple[str, str]:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         jti: str = payload.get("jti")
+        exp: int = payload.get("exp")
         
-        if username is None or jti is None:
+        if username is None or jti is None or exp is None:
             raise HTTPException(status_code=401, detail="Invalid token")
         
         # Periodically clean up expired tokens to prevent unbounded memory growth
         # Do this opportunistically during token validation (1% probability)
-        if secrets.randbelow(100) == 0:
+        if random.randint(0, 99) == 0:
             cleanup_expired_tokens()
         
         # Check if token has been revoked (thread-safe)
@@ -97,7 +99,7 @@ def require_teacher(token: str | None) -> tuple[str, str]:
             if jti in revoked_tokens:
                 raise HTTPException(status_code=401, detail="Token has been revoked")
             
-        return username, jti
+        return username, jti, exp
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -194,12 +196,8 @@ def login(request: LoginRequest):
 
 @app.post("/auth/logout")
 def logout(token: str | None = Header(None, alias="X-Teacher-Token")):
-    # Validate the token and get the JTI
-    username, jti = require_teacher(token)
-    
-    # Decode the token to get the expiration time
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    exp_time = payload.get("exp")
+    # Validate the token and get the JTI and expiration time
+    username, jti, exp_time = require_teacher(token)
     
     # Add the token's JTI to the revoked set with its expiration time (thread-safe)
     with revoked_tokens_lock:
@@ -215,7 +213,7 @@ def signup_for_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Sign up a student for an activity"""
-    username, _ = require_teacher(token)
+    username, _, _ = require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -242,7 +240,7 @@ def unregister_from_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Unregister a student from an activity"""
-    username, _ = require_teacher(token)
+    username, _, _ = require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
