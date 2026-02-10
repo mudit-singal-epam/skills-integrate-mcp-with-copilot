@@ -297,7 +297,8 @@ document.addEventListener("DOMContentLoaded", () => {
   async function handleUnregister(event) {
     if (!authToken) {
       messageDiv.textContent = "Teacher login required to unregister students.";
-      messageDiv.className = "error";
+      messageDiv.classList.remove("success");
+      messageDiv.classList.add("error");
       messageDiv.classList.remove("hidden");
       return;
     }
@@ -323,13 +324,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (response.ok) {
         messageDiv.textContent = result.message;
-        messageDiv.className = "success";
+        messageDiv.classList.remove("error");
+        messageDiv.classList.add("success");
 
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        messageDiv.classList.remove("success");
+        messageDiv.classList.add("error");
       }
 
       messageDiv.classList.remove("hidden");
@@ -340,7 +343,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }, 5000);
     } catch (error) {
       messageDiv.textContent = "Failed to unregister. Please try again.";
-      messageDiv.className = "error";
+      messageDiv.classList.remove("success");
+      messageDiv.classList.add("error");
       messageDiv.classList.remove("hidden");
       console.error("Error unregistering:", error);
     }
@@ -352,7 +356,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!authToken) {
       messageDiv.textContent = "Teacher login required to register students.";
-      messageDiv.className = "error";
+      messageDiv.classList.remove("success");
+      messageDiv.classList.add("error");
       messageDiv.classList.remove("hidden");
       return;
     }
@@ -377,14 +382,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (response.ok) {
         messageDiv.textContent = result.message;
-        messageDiv.className = "success";
+        messageDiv.classList.remove("error");
+        messageDiv.classList.add("success");
         signupForm.reset();
 
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        messageDiv.classList.remove("success");
+        messageDiv.classList.add("error");
       }
 
       messageDiv.classList.remove("hidden");
@@ -395,7 +402,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }, 5000);
     } catch (error) {
       messageDiv.textContent = "Failed to sign up. Please try again.";
-      messageDiv.className = "error";
+      messageDiv.classList.remove("success");
+      messageDiv.classList.add("error");
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
     }
