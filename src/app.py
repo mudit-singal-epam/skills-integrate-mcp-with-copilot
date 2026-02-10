@@ -13,8 +13,9 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import secrets
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Set
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -55,20 +56,29 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+# In-memory storage for revoked token JTIs (JWT IDs)
+# In production, this should be stored in Redis or a database
+revoked_tokens: Set[str] = set()
 
-def require_teacher(token: str | None) -> str:
-    """Validate JWT token and return username."""
+
+def require_teacher(token: str | None) -> tuple[str, str]:
+    """Validate JWT token and return (username, jti)."""
     if not token:
         raise HTTPException(status_code=401, detail="Teacher login required")
     
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        jti: str = payload.get("jti")
         
-        if username is None:
+        if username is None or jti is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Check if token has been revoked
+        if jti in revoked_tokens:
+            raise HTTPException(status_code=401, detail="Token has been revoked")
             
-        return username
+        return username, jti
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -153,10 +163,11 @@ def login(request: LoginRequest):
     if not expected_password or expected_password != request.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Create JWT token with expiration
+    # Create JWT token with expiration and unique JTI
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     expire = datetime.now(timezone.utc) + expires_delta
-    to_encode = {"sub": request.username, "exp": int(expire.timestamp())}
+    jti = secrets.token_urlsafe(32)  # Generate unique token ID
+    to_encode = {"sub": request.username, "exp": int(expire.timestamp()), "jti": jti}
     token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
     return {"token": token, "username": request.username}
@@ -164,11 +175,13 @@ def login(request: LoginRequest):
 
 @app.post("/auth/logout")
 def logout(token: str | None = Header(None, alias="X-Teacher-Token")):
-    # Validate the token is legitimate before allowing logout
-    require_teacher(token)
-    # With stateless JWT, we don't need to track sessions server-side
-    # The token will expire naturally based on its exp claim
-    return {"message": "Logged out"}
+    # Validate the token and get the JTI
+    username, jti = require_teacher(token)
+    
+    # Add the token's JTI to the revoked set
+    revoked_tokens.add(jti)
+    
+    return {"message": "Logged out successfully"}
 
 
 @app.post("/activities/{activity_name}/signup")
@@ -178,7 +191,7 @@ def signup_for_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Sign up a student for an activity"""
-    require_teacher(token)
+    username, _ = require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -205,7 +218,7 @@ def unregister_from_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Unregister a student from an activity"""
-    require_teacher(token)
+    username, _ = require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
