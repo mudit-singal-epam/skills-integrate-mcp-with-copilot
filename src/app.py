@@ -56,7 +56,24 @@ def load_teachers(path: Path) -> Dict[str, str]:
             )
             return {}
         
-        return {entry["username"]: entry["password"] for entry in data}
+        # Build credentials dict with validation
+        credentials = {}
+        for entry in data:
+            if not isinstance(entry, dict):
+                logger.warning(
+                    f"Teacher credentials file at {path} contains invalid entry (expected dict, got {type(entry).__name__}). "
+                    "Skipping invalid entry."
+                )
+                continue
+            if "username" not in entry or "password" not in entry:
+                logger.warning(
+                    f"Teacher credentials file at {path} contains entry missing required fields (username and/or password). "
+                    "Skipping invalid entry."
+                )
+                continue
+            credentials[entry["username"]] = entry["password"]
+        
+        return credentials
     except json.JSONDecodeError as e:
         logger.warning(
             f"Teacher credentials file at {path} is malformed and cannot be parsed: {e}. "
