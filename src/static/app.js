@@ -124,6 +124,7 @@ document.addEventListener("DOMContentLoaded", () => {
               deleteButton.className = "delete-btn";
               deleteButton.setAttribute("data-activity", name);
               deleteButton.setAttribute("data-email", email);
+              deleteButton.setAttribute("aria-label", `Unregister ${email} from ${name}`);
               deleteButton.textContent = "❌";
               listItem.appendChild(deleteButton);
             }
