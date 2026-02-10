@@ -24,8 +24,34 @@ header {
   border-radius: 5px;
 }
 
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  text-align: left;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-status {
+  font-size: 14px;
+  color: #c5cae9;
+}
+
 header h1 {
   margin-bottom: 10px;
+}
+
+@media (max-width: 700px) {
+  .header-content {
+    flex-direction: column;
+    text-align: center;
+  }
 }
 
 main {
@@ -164,6 +190,28 @@ button:hover {
   background-color: #3949ab;
 }
 
+.icon-button {
+  background-color: transparent;
+  border: 1px solid #c5cae9;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.icon-button:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.secondary {
+  background-color: #c62828;
+  margin-top: 10px;
+}
+
+.secondary:hover {
+  background-color: #b71c1c;
+}
+
 .message {
   margin-top: 20px;
   padding: 10px;
@@ -190,6 +238,33 @@ button:hover {
 
 .hidden {
   display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10;
+}
+
+.modal-content {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+#auth-message {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 14px;
 }
 
 footer {
