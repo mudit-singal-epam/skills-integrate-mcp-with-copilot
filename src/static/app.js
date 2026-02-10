@@ -11,9 +11,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const loginFields = document.getElementById("login-fields");
   const logoutButton = document.getElementById("logout-button");
   const authMessage = document.getElementById("auth-message");
+  const modalCloseButton = document.getElementById("modal-close-button");
 
   let authToken = null;
   let authUser = null;
+  let lastFocusedElement = null;
 
   function setAuthUI() {
     const isLoggedIn = Boolean(authToken);
@@ -43,12 +45,66 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function toggleAuthModal(show) {
     if (show) {
+      // Save the currently focused element
+      lastFocusedElement = document.activeElement;
+      
       authModal.classList.remove("hidden");
       authModal.setAttribute("aria-hidden", "false");
       hideAuthMessage();
+      
+      // Set initial focus to the first input field or close button
+      const usernameInput = document.getElementById("username");
+      if (usernameInput && !usernameInput.closest(".hidden")) {
+        usernameInput.focus();
+      } else {
+        modalCloseButton.focus();
+      }
     } else {
       authModal.classList.add("hidden");
       authModal.setAttribute("aria-hidden", "true");
+      
+      // Restore focus to the element that opened the modal
+      if (lastFocusedElement) {
+        lastFocusedElement.focus();
+        lastFocusedElement = null;
+      }
+    }
+  }
+
+  // Handle keyboard navigation in modal (focus trap and Escape key)
+  function handleModalKeydown(event) {
+    if (event.key === "Escape") {
+      toggleAuthModal(false);
+      return;
+    }
+
+    // Focus trap: keep focus within modal
+    if (event.key === "Tab") {
+      const focusableElements = authModal.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      const visibleFocusableElements = Array.from(focusableElements).filter(
+        (el) => !el.closest(".hidden") && el.offsetParent !== null
+      );
+      
+      if (visibleFocusableElements.length === 0) return;
+
+      const firstElement = visibleFocusableElements[0];
+      const lastElement = visibleFocusableElements[visibleFocusableElements.length - 1];
+
+      if (event.shiftKey) {
+        // Shift+Tab: moving backwards
+        if (document.activeElement === firstElement) {
+          event.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        // Tab: moving forwards
+        if (document.activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
+        }
+      }
     }
   }
 
@@ -231,11 +287,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize app
   adminButton.addEventListener("click", () => toggleAuthModal(true));
+  modalCloseButton.addEventListener("click", () => toggleAuthModal(false));
   authModal.addEventListener("click", (event) => {
     if (event.target === authModal) {
       toggleAuthModal(false);
     }
   });
+  authModal.addEventListener("keydown", handleModalKeydown);
 
   loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
