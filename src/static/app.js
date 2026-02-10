@@ -15,6 +15,59 @@ document.addEventListener("DOMContentLoaded", () => {
   let authToken = null;
   let authUser = null;
 
+  // Decode JWT payload to check expiration (without verification)
+  function decodeJWT(token) {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      
+      // Decode base64url payload
+      const payload = parts[1];
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('Failed to decode JWT:', error);
+      return null;
+    }
+  }
+
+  // Check if JWT token is expired
+  function isTokenExpired(token) {
+    const payload = decodeJWT(token);
+    if (!payload || !payload.exp) return true;
+    
+    // exp is in seconds, Date.now() is in milliseconds
+    const now = Math.floor(Date.now() / 1000);
+    return payload.exp < now;
+  }
+
+  // Initialize auth state from localStorage, if available and not expired
+  try {
+    const storedToken = window.localStorage.getItem("teacherToken");
+    const storedUser = window.localStorage.getItem("teacherUser");
+    
+    if (storedToken && storedUser) {
+      if (!isTokenExpired(storedToken)) {
+        authToken = storedToken;
+        authUser = storedUser;
+      } else {
+        // Token expired, clear localStorage
+        window.localStorage.removeItem("teacherToken");
+        window.localStorage.removeItem("teacherUser");
+      }
+    }
+  } catch (e) {
+    // If accessing localStorage fails (e.g., disabled), start with no auth state
+    console.error('Failed to restore auth state:', e);
+  }
+
   function setAuthUI() {
     const isLoggedIn = Boolean(authToken);
     adminStatus.textContent = isLoggedIn
