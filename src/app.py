@@ -35,15 +35,15 @@ class LoginRequest(BaseModel):
 # Using bcrypt for secure password hashing with passlib's CryptContext
 # 
 # Security Benefits:
-# 1. **Hashing vs Plaintext Storage**: Bcrypt creates a one-way cryptographic hash of passwords.
+# 1. **Hashing vs Plaintext Storage**: bcrypt creates a one-way cryptographic hash of passwords.
 #    If the credential file is compromised, attackers cannot reverse-engineer the original passwords.
 #    This is crucial for protecting user accounts even when data is leaked.
 #
-# 2. **Salting**: Bcrypt automatically generates a unique salt for each password hash.
+# 2. **Salting**: bcrypt automatically generates a unique salt for each password hash.
 #    This prevents rainbow table attacks and ensures identical passwords produce different hashes.
 #    The salt is embedded in the hash output, so no separate storage is needed.
 #
-# 3. **Adaptive Cost Factor**: Bcrypt's computational cost can be increased over time as hardware improves.
+# 3. **Adaptive Cost Factor**: bcrypt's computational cost can be increased over time as hardware improves.
 #    This work factor (default: 12 rounds) makes brute-force attacks computationally expensive.
 #    Each increment doubles the computation time, providing long-term security.
 #
@@ -53,7 +53,7 @@ class LoginRequest(BaseModel):
 #
 # Learn More:
 # - OWASP Password Storage Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
-# - Bcrypt Algorithm Explained: https://en.wikipedia.org/wiki/Bcrypt
+# - bcrypt Algorithm Explained: https://en.wikipedia.org/wiki/Bcrypt
 # - Timing Attack Prevention: https://codahale.com/a-lesson-in-timing-attacks/
 # - Passlib Documentation: https://passlib.readthedocs.io/en/stable/narr/quickstart.html
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
