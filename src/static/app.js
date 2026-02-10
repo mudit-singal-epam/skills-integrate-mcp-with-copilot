@@ -23,7 +23,14 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Decode base64url payload
       const payload = parts[1];
-      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      
+      // Add padding if needed (JWT payloads are typically unpadded)
+      const padding = base64.length % 4;
+      if (padding > 0) {
+        base64 += '='.repeat(4 - padding);
+      }
+      
       const jsonPayload = decodeURIComponent(
         atob(base64)
           .split('')
@@ -41,11 +48,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Check if JWT token is expired
   function isTokenExpired(token) {
     const payload = decodeJWT(token);
-    if (!payload || !payload.exp) return true;
+    
+    // Treat tokens with missing or invalid exp as expired
+    if (
+      !payload ||
+      typeof payload.exp !== "number" ||
+      !Number.isFinite(payload.exp)
+    ) {
+      return true;
+    }
     
     // exp is in seconds, Date.now() is in milliseconds
     const now = Math.floor(Date.now() / 1000);
-    return payload.exp < now;
+    // Token is expired when current time is on or after exp
+    return payload.exp <= now;
   }
 
   // Initialize auth state from localStorage, if available and not expired
@@ -62,6 +78,10 @@ document.addEventListener("DOMContentLoaded", () => {
         window.localStorage.removeItem("teacherToken");
         window.localStorage.removeItem("teacherUser");
       }
+    } else if (storedToken || storedUser) {
+      // Inconsistent auth state, clear both entries to keep storage consistent
+      window.localStorage.removeItem("teacherToken");
+      window.localStorage.removeItem("teacherUser");
     }
   } catch (e) {
     // If accessing localStorage fails (e.g., disabled), start with no auth state
