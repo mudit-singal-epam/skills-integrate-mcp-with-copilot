@@ -67,6 +67,8 @@ cleanup_counter = 0  # Counter for periodic cleanup (thread-safe via lock)
 
 def require_teacher(token: str | None) -> tuple[str, str, int]:
     """Validate JWT token and return (username, jti, exp)."""
+    global cleanup_counter
+    
     if not token:
         raise HTTPException(status_code=401, detail="Teacher login required")
     
@@ -87,7 +89,6 @@ def require_teacher(token: str | None) -> tuple[str, str, int]:
             # Periodically clean up expired tokens to prevent unbounded memory growth
             # Use counter-based approach: cleanup every 100 requests
             # Counter is incremented inside lock to ensure thread-safety
-            global cleanup_counter
             cleanup_counter += 1
             if cleanup_counter >= 100:
                 cleanup_counter = 0
@@ -195,7 +196,7 @@ def login(request: LoginRequest):
 @app.post("/auth/logout")
 def logout(token: str | None = Header(None, alias="X-Teacher-Token")):
     # Validate the token and get the JTI and expiration time
-    username, jti, exp_time = require_teacher(token)
+    _, jti, exp_time = require_teacher(token)
     
     # Add the token's JTI to the revoked set with its expiration time (thread-safe)
     with revoked_tokens_lock:
@@ -211,7 +212,7 @@ def signup_for_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Sign up a student for an activity"""
-    username, _, _ = require_teacher(token)
+    _, _, _ = require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -238,7 +239,7 @@ def unregister_from_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Unregister a student from an activity"""
-    username, _, _ = require_teacher(token)
+    _, _, _ = require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
