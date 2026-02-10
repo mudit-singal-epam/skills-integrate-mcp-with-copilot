@@ -164,18 +164,120 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# In-memory storage for revoked token JTIs with expiration times
-# In production, this should be stored in Redis or a database with TTL
-# Structure: {jti: expiration_timestamp} where expiration_timestamp is Unix epoch time in seconds
-revoked_tokens: Dict[str, int] = {}
-revoked_tokens_lock = threading.Lock()  # Thread-safe access to revoked_tokens
-cleanup_counter = 0  # Counter for periodic cleanup (thread-safe via lock)
+class TokenRevocationManager:
+    """
+    Singleton class for managing JWT token revocation with automatic TTL-based cleanup.
+    
+    This class provides thread-safe token revocation tracking with automatic cleanup of 
+    expired tokens to prevent unbounded memory growth.
+    
+    IMPORTANT: This implementation uses in-memory storage and is NOT suitable for 
+    multi-process deployments (e.g., multiple Uvicorn workers). For production use 
+    with multiple processes, integrate with a shared data store like Redis.
+    
+    Limitations:
+    - Token revocations are not shared across multiple process instances
+    - Revoked tokens are lost on application restart
+    - Each worker process maintains its own revocation list
+    
+    For production multi-process deployments, consider:
+    - Redis with TTL support (recommended)
+    - Shared database with expiration timestamps
+    - Distributed cache systems
+    
+    Thread-Safety:
+    - All public methods are thread-safe using a threading.Lock
+    - Cleanup happens automatically during revocation checks
+    - No external synchronization required
+    """
+    
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        """Ensure only one instance exists (singleton pattern)."""
+        if cls._instance is None:
+            with cls._lock:
+                # Double-checked locking to prevent race conditions
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        """Initialize the revocation manager (only once)."""
+        if self._initialized:
+            return
+        
+        self._revoked_tokens: Dict[str, int] = {}
+        self._cleanup_counter = 0
+        self._cleanup_threshold = 100  # Cleanup every N checks
+        self._initialized = True
+    
+    def is_revoked(self, jti: str) -> bool:
+        """
+        Check if a token (identified by JTI) has been revoked.
+        
+        This method also performs periodic cleanup of expired tokens to prevent
+        unbounded memory growth.
+        
+        Args:
+            jti: The unique token identifier (JTI claim)
+        
+        Returns:
+            True if the token has been revoked, False otherwise
+        """
+        with self._lock:
+            # Perform periodic cleanup
+            self._cleanup_counter += 1
+            if self._cleanup_counter >= self._cleanup_threshold:
+                self._cleanup_counter = 0
+                self._cleanup_expired()
+            
+            return jti in self._revoked_tokens
+    
+    def revoke(self, jti: str, expiration_time: int) -> None:
+        """
+        Revoke a token by storing its JTI with expiration time.
+        
+        Args:
+            jti: The unique token identifier (JTI claim)
+            expiration_time: Unix timestamp when the token expires
+        """
+        with self._lock:
+            self._revoked_tokens[jti] = expiration_time
+    
+    def _cleanup_expired(self) -> None:
+        """
+        Remove expired tokens from the revocation list.
+        
+        This is an internal method called automatically during is_revoked() checks.
+        It should only be called while holding the lock.
+        """
+        now = int(datetime.now(timezone.utc).timestamp())
+        expired = [jti for jti, exp in self._revoked_tokens.items() if exp <= now]
+        for jti in expired:
+            del self._revoked_tokens[jti]
+    
+    def get_stats(self) -> Dict[str, int]:
+        """
+        Get statistics about the revocation manager.
+        
+        Returns:
+            Dictionary with 'total_revoked' count
+        """
+        with self._lock:
+            return {
+                "total_revoked": len(self._revoked_tokens)
+            }
+
+
+# Initialize the singleton instance
+revocation_manager = TokenRevocationManager()
 
 
 def require_teacher(token: str | None) -> tuple[str, str, int]:
     """Validate JWT token and return (username, jti, exp)."""
-    global cleanup_counter
-    
     if not token:
         raise HTTPException(status_code=401, detail="Teacher login required")
     
@@ -188,22 +290,9 @@ def require_teacher(token: str | None) -> tuple[str, str, int]:
         if username is None or jti is None or exp is None:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Check if token has been revoked (thread-safe)
-        with revoked_tokens_lock:
-            if jti in revoked_tokens:
-                raise HTTPException(status_code=401, detail="Invalid token")
-            
-            # Periodically clean up expired tokens to prevent unbounded memory growth
-            # Use counter-based approach: cleanup every 100 requests
-            # Counter is incremented inside lock to ensure thread-safety
-            cleanup_counter += 1
-            if cleanup_counter >= 100:
-                cleanup_counter = 0
-                # Cleanup also happens inside lock to prevent multiple simultaneous cleanups
-                now = int(datetime.now(timezone.utc).timestamp())
-                expired = [j for j, e in revoked_tokens.items() if e <= now]
-                for j in expired:
-                    del revoked_tokens[j]
+        # Check if token has been revoked using the singleton manager
+        if revocation_manager.is_revoked(jti):
+            raise HTTPException(status_code=401, detail="Invalid token")
             
         return username, jti, exp
     except JWTError:
@@ -320,9 +409,8 @@ def logout(token: str | None = Header(None, alias="X-Teacher-Token")):
     # Validate the token and get the JTI and expiration time
     _, jti, exp_time = require_teacher(token)
     
-    # Add the token's JTI to the revoked set with its expiration time (thread-safe)
-    with revoked_tokens_lock:
-        revoked_tokens[jti] = exp_time
+    # Revoke the token using the singleton manager
+    revocation_manager.revoke(jti, exp_time)
     
     return {"message": "Logged out successfully"}
 
