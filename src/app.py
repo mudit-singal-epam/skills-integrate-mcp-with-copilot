@@ -10,12 +10,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
 import secrets
-from typing import Dict, Optional
+from typing import Dict
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -45,6 +45,9 @@ teachers_path = current_dir / "teachers.json"
 teacher_credentials = load_teachers(teachers_path)
 
 # JWT configuration
+# WARNING: In production, JWT_SECRET_KEY must be set as an environment variable
+# The random default is only suitable for development/testing and will cause
+# tokens to become invalid after server restart or across multiple workers
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_urlsafe(32))
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -58,14 +61,9 @@ def require_teacher(token: str | None) -> str:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-        exp: Optional[int] = payload.get("exp")
         
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        
-        # JWT library validates expiration automatically, but we check explicitly for clarity
-        if exp and datetime.utcfromtimestamp(exp) < datetime.utcnow():
-            raise HTTPException(status_code=401, detail="Token expired")
             
         return username
     except JWTError:
@@ -154,7 +152,7 @@ def login(request: LoginRequest):
 
     # Create JWT token with expiration
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    expire = datetime.utcnow() + expires_delta
+    expire = datetime.now(timezone.utc) + expires_delta
     to_encode = {"sub": request.username, "exp": expire}
     token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
