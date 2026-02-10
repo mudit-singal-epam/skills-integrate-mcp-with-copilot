@@ -186,9 +186,10 @@ class TokenRevocationManager:
     - Distributed cache systems
     
     Thread-Safety:
-    - All public methods are thread-safe using a threading.Lock
-    - Cleanup happens automatically during revocation checks
-    - No external synchronization required
+    - Singleton instantiation uses a dedicated class-level lock (_instance_lock)
+    - Runtime operations (is_revoked, revoke, get_stats) use a separate instance-level lock (_tokens_lock)
+    - This separation prevents singleton creation from contending with runtime token operations
+    - All public methods are thread-safe; no external synchronization required
     
     Example Usage:
         # Check if a token is revoked during authentication
@@ -205,7 +206,7 @@ class TokenRevocationManager:
     
     # Class-level attributes for singleton pattern
     _instance = None  # Holds the single instance of this class
-    _lock = threading.Lock()  # Protects singleton creation from race conditions
+    _instance_lock = threading.Lock()  # Protects singleton creation from race conditions
     
     def __new__(cls):
         """
@@ -223,7 +224,7 @@ class TokenRevocationManager:
             where multiple threads could partially initialize the same instance.
         """
         if cls._instance is None:
-            with cls._lock:
+            with cls._instance_lock:
                 # Double-check after acquiring lock (another thread may have created it)
                 if cls._instance is None:
                     instance = super().__new__(cls)
@@ -233,6 +234,7 @@ class TokenRevocationManager:
                     instance._revoked_tokens = {}  # Maps JTI -> expiration timestamp
                     instance._cleanup_counter = 0  # Tracks number of checks since last cleanup
                     instance._cleanup_threshold = 100  # Cleanup every N checks to balance overhead vs memory
+                    instance._tokens_lock = threading.Lock()  # Instance-level lock for runtime operations
                     cls._instance = instance
         return cls._instance
     
@@ -255,7 +257,7 @@ class TokenRevocationManager:
             - O(n) cleanup operation every 100 calls, where n is the number of revoked tokens
             - Lock acquisition on every call may become a bottleneck under extreme load
         """
-        with self._lock:
+        with self._tokens_lock:
             # Increment counter and trigger cleanup if threshold reached
             # This amortizes the cost of cleanup across multiple checks
             self._cleanup_counter += 1
@@ -282,7 +284,7 @@ class TokenRevocationManager:
             If the same JTI is revoked multiple times, the latest expiration time
             will be used (dict update behavior).
         """
-        with self._lock:
+        with self._tokens_lock:
             self._revoked_tokens[jti] = expiration_time
     
     def _cleanup_expired(self) -> None:
@@ -293,7 +295,7 @@ class TokenRevocationManager:
         expiration time has passed. This prevents the revoked token list from
         growing indefinitely.
         
-        This method should only be called while holding self._lock to ensure
+        This method should only be called while holding self._tokens_lock to ensure
         thread-safe modification of _revoked_tokens.
         
         Complexity:
@@ -326,7 +328,7 @@ class TokenRevocationManager:
             The count includes tokens that have expired but haven't been cleaned up yet.
             The actual number of active revoked tokens may be lower after cleanup.
         """
-        with self._lock:
+        with self._tokens_lock:
             return {
                 "total_revoked": len(self._revoked_tokens)
             }
