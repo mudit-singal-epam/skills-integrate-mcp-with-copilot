@@ -53,11 +53,11 @@ The application requires a `teachers.json` file in the `src` directory for teach
 [
   {
     "username": "teacher1",
-    "password": "$2b$12$CEgqR1AK2ww.Hb4c8uiJ/OSCYbbsqGKC8mPYpfixUxmjCH9C5tf2C"
+    "password": "$2b$12$...(bcrypt hash of teacher1's password)..."
   },
   {
     "username": "coach",
-    "password": "$2b$12$CqIWFlAMTrZ/eNcILkGk2O2iM5SS6znGaaUz4jyWHCbKJApHA/ws2"
+    "password": "$2b$12$...(bcrypt hash of coach's password)..."
   }
 ]
 ```
@@ -80,6 +80,8 @@ print(hashed_password)
    ```bash
    pip install -r requirements.txt
    ```
+
+   This will install FastAPI, Uvicorn, python-jose (for JWT), passlib (for bcrypt), and other required dependencies.
 
 2. Set up the environment variables and teachers.json file as described above.
 
