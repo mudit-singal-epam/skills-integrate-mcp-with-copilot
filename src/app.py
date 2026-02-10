@@ -65,16 +65,6 @@ revoked_tokens_lock = threading.Lock()  # Thread-safe access to revoked_tokens
 cleanup_counter = 0  # Counter for periodic cleanup
 
 
-def cleanup_expired_tokens():
-    """Remove expired token JTIs from the revoked set to prevent memory growth."""
-    now = int(datetime.now(timezone.utc).timestamp())
-    with revoked_tokens_lock:
-        # Remove expired tokens by creating list of expired JTIs first
-        expired = [jti for jti, exp in revoked_tokens.items() if exp < now]
-        for jti in expired:
-            del revoked_tokens[jti]
-
-
 def require_teacher(token: str | None) -> tuple[str, str, int]:
     """Validate JWT token and return (username, jti, exp)."""
     if not token:
@@ -89,18 +79,23 @@ def require_teacher(token: str | None) -> tuple[str, str, int]:
         if username is None or jti is None or exp is None:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Periodically clean up expired tokens to prevent unbounded memory growth
-        # Use counter-based approach: cleanup every 100 requests to avoid random overhead
-        global cleanup_counter
-        cleanup_counter += 1
-        if cleanup_counter >= 100:
-            cleanup_counter = 0
-            cleanup_expired_tokens()
-        
         # Check if token has been revoked (thread-safe)
         with revoked_tokens_lock:
             if jti in revoked_tokens:
                 raise HTTPException(status_code=401, detail="Token has been revoked")
+            
+            # Periodically clean up expired tokens to prevent unbounded memory growth
+            # Use counter-based approach: cleanup every 100 requests
+            # Counter is incremented inside lock to ensure thread-safety
+            global cleanup_counter
+            cleanup_counter += 1
+            if cleanup_counter >= 100:
+                cleanup_counter = 0
+                # Cleanup also happens inside lock to prevent multiple simultaneous cleanups
+                now = int(datetime.now(timezone.utc).timestamp())
+                expired = [j for j, e in revoked_tokens.items() if e < now]
+                for j in expired:
+                    del revoked_tokens[j]
             
         return username, jti, exp
     except JWTError:
