@@ -169,7 +169,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 #
 # Limitations:
 # - Uses in-memory storage (not shared across multiple worker processes)
-# - Revoked tokens are lost on application restart  
+# - Revoked tokens are lost on application restart
 # - Each worker process maintains its own revocation list
 #
 # For production multi-process deployments, consider:
