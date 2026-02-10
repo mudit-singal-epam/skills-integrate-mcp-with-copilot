@@ -21,7 +21,6 @@ app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Mount the static files directory
@@ -47,6 +46,16 @@ def load_teachers(path: Path) -> Dict[str, str]:
     try:
         with path.open("r", encoding="utf-8") as handle:
             data = json.load(handle)
+        
+        # Validate that data is a list
+        if not isinstance(data, list):
+            logger.warning(
+                f"Teacher credentials file at {path} has invalid structure (expected a list, got {type(data).__name__}). "
+                "All teacher login attempts will fail. "
+                "Please ensure the file contains a JSON array of teacher credentials."
+            )
+            return {}
+        
         return {entry["username"]: entry["password"] for entry in data}
     except json.JSONDecodeError as e:
         logger.warning(
