@@ -15,7 +15,6 @@ import json
 import os
 import secrets
 import threading
-import random
 from pathlib import Path
 from typing import Dict
 
@@ -63,15 +62,16 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 # Structure: {jti: expiration_timestamp}
 revoked_tokens: Dict[str, int] = {}
 revoked_tokens_lock = threading.Lock()  # Thread-safe access to revoked_tokens
+cleanup_counter = 0  # Counter for periodic cleanup
 
 
 def cleanup_expired_tokens():
     """Remove expired token JTIs from the revoked set to prevent memory growth."""
     now = int(datetime.now(timezone.utc).timestamp())
     with revoked_tokens_lock:
-        # Remove all tokens whose expiration time has passed
-        expired_jtis = [jti for jti, exp_time in revoked_tokens.items() if exp_time < now]
-        for jti in expired_jtis:
+        # Remove expired tokens by creating list of expired JTIs first
+        expired = [jti for jti, exp in revoked_tokens.items() if exp < now]
+        for jti in expired:
             del revoked_tokens[jti]
 
 
@@ -90,8 +90,11 @@ def require_teacher(token: str | None) -> tuple[str, str, int]:
             raise HTTPException(status_code=401, detail="Invalid token")
         
         # Periodically clean up expired tokens to prevent unbounded memory growth
-        # Do this opportunistically during token validation (1% probability)
-        if random.randint(0, 99) == 0:
+        # Use counter-based approach: cleanup every 100 requests to avoid random overhead
+        global cleanup_counter
+        cleanup_counter += 1
+        if cleanup_counter >= 100:
+            cleanup_counter = 0
             cleanup_expired_tokens()
         
         # Check if token has been revoked (thread-safe)
