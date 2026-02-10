@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
+from passlib import exc as passlib_exc
 import json
 import logging
 import os
@@ -299,7 +300,14 @@ def login(request: LoginRequest):
     # Validate credentials using constant-time hash verification
     # The verify() method uses constant-time comparison internally to prevent
     # timing attacks that could reveal information about the password.
-    is_valid = pwd_context.verify(request.password, hash_to_verify)
+    try:
+        is_valid = pwd_context.verify(request.password, hash_to_verify)
+    except (ValueError, passlib_exc.UnknownHashError):
+        # Handle malformed or non-bcrypt hashes in teachers.json
+        # Log a warning if the stored hash is invalid (but not for dummy hash failures)
+        if stored_password_hash:
+            logger.warning("Invalid password hash detected for user %s", request.username)
+        is_valid = False
     
     # Only proceed if both username exists AND password is valid
     if not stored_password_hash or not is_valid:
