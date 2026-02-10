@@ -86,7 +86,11 @@ def load_teachers(path: Path) -> Dict[str, str]:
                     path, type(username).__name__, type(password).__name__
                 )
                 continue
-            if not username.strip() or not password.strip():
+            
+            # Strip whitespace and validate non-empty
+            username = username.strip()
+            password = password.strip()
+            if not username or not password:
                 logger.warning(
                     "Teacher credentials file at %s contains entry with empty or whitespace-only username or password. "
                     "Skipping invalid entry.",
