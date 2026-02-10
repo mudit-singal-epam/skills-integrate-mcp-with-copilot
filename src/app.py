@@ -45,10 +45,14 @@ teachers_path = current_dir / "teachers.json"
 teacher_credentials = load_teachers(teachers_path)
 
 # JWT configuration
-# WARNING: In production, JWT_SECRET_KEY must be set as an environment variable
-# The random default is only suitable for development/testing and will cause
-# tokens to become invalid after server restart or across multiple workers
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_urlsafe(32))
+# JWT_SECRET_KEY must be set as an environment variable for secure token signing
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError(
+        "JWT_SECRET_KEY environment variable is required. "
+        "Please set it to a secure random string. "
+        "You can generate one using: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
