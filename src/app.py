@@ -153,7 +153,7 @@ def login(request: LoginRequest):
     # Create JWT token with expiration
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     expire = datetime.now(timezone.utc) + expires_delta
-    to_encode = {"sub": request.username, "exp": expire}
+    to_encode = {"sub": request.username, "exp": int(expire.timestamp())}
     token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
     return {"token": token, "username": request.username}
