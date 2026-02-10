@@ -361,8 +361,12 @@ def login(request: LoginRequest):
             status_code=503,
             detail="Teacher authentication is disabled. Set JWT_SECRET_KEY to enable admin features."
         )
+    # Strip whitespace from username and password to match load_teachers() behavior
+    username = request.username.strip()
+    password = request.password.strip()
+    
     # Retrieve the stored password hash for the username
-    stored_password_hash = teacher_credentials.get(request.username)
+    stored_password_hash = teacher_credentials.get(username)
     
     # Use a dummy hash for invalid usernames to prevent timing attacks
     # This ensures pwd_context.verify() is always called, maintaining constant time
@@ -375,12 +379,12 @@ def login(request: LoginRequest):
     # The verify() method uses constant-time comparison internally to prevent
     # timing attacks that could reveal information about the password.
     try:
-        is_valid = pwd_context.verify(request.password, hash_to_verify)
+        is_valid = pwd_context.verify(password, hash_to_verify)
     except (ValueError, passlib_exc.UnknownHashError):
         # Handle malformed or non-bcrypt hashes in teachers.json
         # Log a warning if the stored hash is invalid (but not for dummy hash failures)
         if stored_password_hash:
-            logger.warning("Invalid password hash detected for user %s", request.username)
+            logger.warning("Invalid password hash detected for user %s", username)
         is_valid = False
     
     # Only proceed if both username exists AND password is valid
@@ -391,10 +395,10 @@ def login(request: LoginRequest):
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     expire = datetime.now(timezone.utc) + expires_delta
     jti = secrets.token_urlsafe(32)  # Generate unique token ID
-    to_encode = {"sub": request.username, "exp": int(expire.timestamp()), "jti": jti}
+    to_encode = {"sub": username, "exp": int(expire.timestamp()), "jti": jti}
     token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
-    return {"token": token, "username": request.username}
+    return {"token": token, "username": username}
 
 
 @app.post("/auth/logout")
