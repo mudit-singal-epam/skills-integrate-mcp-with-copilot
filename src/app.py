@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
+from passlib.context import CryptContext
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,34 @@ app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+# Password hashing configuration
+# Using bcrypt for secure password hashing with passlib's CryptContext
+# 
+# Security Benefits:
+# 1. **Hashing vs Plaintext Storage**: bcrypt creates a one-way cryptographic hash of passwords.
+#    If the credential file is compromised, attackers cannot reverse-engineer the original passwords.
+#    This is crucial for protecting user accounts even when data is leaked.
+#
+# 2. **Salting**: bcrypt automatically generates a unique salt for each password hash.
+#    This prevents rainbow table attacks and ensures identical passwords produce different hashes.
+#    The salt is embedded in the hash output, so no separate storage is needed.
+#
+# 3. **Adaptive Cost Factor**: bcrypt's computational cost can be increased over time as hardware improves.
+#    This work factor (default: 12 rounds) makes brute-force attacks computationally expensive.
+#    Each increment doubles the computation time, providing long-term security.
+#
+# 4. **Constant-Time Comparison**: The verify() method uses constant-time comparison to prevent
+#    timing attacks where attackers measure response times to guess password characteristics.
+#    This ensures validation time is independent of where the password comparison fails.
+#
+# Learn More:
+# - OWASP Password Storage Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+# - bcrypt Algorithm Explained: https://en.wikipedia.org/wiki/Bcrypt
+# - Timing Attack Prevention: https://codahale.com/a-lesson-in-timing-attacks/
+# - Passlib Documentation: https://passlib.readthedocs.io/en/stable/narr/quickstart.html
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def load_teachers(path: Path) -> Dict[str, str]:
@@ -149,8 +178,23 @@ def get_activities():
 
 @app.post("/auth/login")
 def login(request: LoginRequest):
-    expected_password = teacher_credentials.get(request.username)
-    if not expected_password or expected_password != request.password:
+    # Retrieve the stored password hash for the username
+    stored_password_hash = teacher_credentials.get(request.username)
+    
+    # Use a dummy hash for invalid usernames to prevent timing attacks
+    # This ensures pwd_context.verify() is always called, maintaining constant time
+    # regardless of whether the username exists. Without this, an attacker could
+    # measure response times to enumerate valid usernames.
+    dummy_hash = "$2b$12$YVp7allSvMoMAAfCeMBxy.5dAqb0StaIo8x/f2m8IhJm/zB8FVrbq"
+    hash_to_verify = stored_password_hash if stored_password_hash else dummy_hash
+    
+    # Validate credentials using constant-time hash verification
+    # The verify() method uses constant-time comparison internally to prevent
+    # timing attacks that could reveal information about the password.
+    is_valid = pwd_context.verify(request.password, hash_to_verify)
+    
+    # Only proceed if both username exists AND password is valid
+    if not stored_password_hash or not is_valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Create JWT token with expiration

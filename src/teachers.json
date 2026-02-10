@@ -1,10 +1,10 @@
 [
   {
     "username": "teacher1",
-    "password": "mergington"
+    "password": "$2b$12$CEgqR1AK2ww.Hb4c8uiJ/OSCYbbsqGKC8mPYpfixUxmjCH9C5tf2C"
   },
   {
     "username": "coach",
-    "password": "dragons"
+    "password": "$2b$12$CqIWFlAMTrZ/eNcILkGk2O2iM5SS6znGaaUz4jyWHCbKJApHA/ws2"
   }
 ]
