@@ -15,7 +15,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let authToken = null;
   let authUser = null;
+  let authEnabled = true;
   let lastFocusedElement = null;
+  let messageTimeoutId = null;
 
   // Decode JWT payload to check expiration (without verification)
   function decodeJWT(token) {
@@ -92,10 +94,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function setAuthUI() {
     const isLoggedIn = Boolean(authToken);
+    adminButton.disabled = !authEnabled;
+    adminButton.setAttribute("aria-disabled", String(!authEnabled));
+    signupButton.disabled = !isLoggedIn || !authEnabled;
+
+    if (!authEnabled) {
+      adminStatus.textContent = "Teacher login disabled";
+      loginFields.classList.add("hidden");
+      logoutButton.classList.add("hidden");
+      return;
+    }
+
     adminStatus.textContent = isLoggedIn
       ? `Logged in as ${authUser}`
       : "Not logged in";
-    signupButton.disabled = !isLoggedIn;
     if (isLoggedIn) {
       loginFields.classList.add("hidden");
       logoutButton.classList.remove("hidden");
@@ -107,13 +119,58 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function showAuthMessage(message, isError = false) {
     authMessage.textContent = message;
-    authMessage.className = isError ? "error" : "success";
+    authMessage.classList.add("message");
+    authMessage.classList.remove("success", "error", "info", "hidden");
+    authMessage.classList.add(isError ? "error" : "success");
     authMessage.classList.remove("hidden");
   }
 
   function hideAuthMessage() {
     authMessage.classList.add("hidden");
+    authMessage.classList.remove("success", "error", "info");
     authMessage.textContent = "";
+  }
+
+  function showAppMessage(message, type = "info") {
+    messageDiv.textContent = message;
+    messageDiv.classList.add("message");
+    messageDiv.classList.remove("success", "error", "info", "hidden");
+    messageDiv.classList.add(type);
+    messageDiv.classList.remove("hidden");
+  }
+
+  function hideAppMessage() {
+    messageDiv.classList.add("hidden");
+    messageDiv.classList.remove("success", "error", "info");
+    messageDiv.textContent = "";
+  }
+
+  function scheduleMessageHide() {
+    if (messageTimeoutId !== null) {
+      clearTimeout(messageTimeoutId);
+    }
+    messageTimeoutId = window.setTimeout(() => {
+      messageDiv.classList.add("hidden");
+      messageTimeoutId = null;
+    }, 5000);
+  }
+
+  function clearAuthState() {
+    authToken = null;
+    authUser = null;
+    localStorage.removeItem("teacherToken");
+    localStorage.removeItem("teacherUser");
+    setAuthUI();
+  }
+
+  function ensureActiveSessionOrReset() {
+    if (!authToken) return true;
+    if (isTokenExpired(authToken)) {
+      clearAuthState();
+      showAppMessage("Session expired. Please log in again.", "error");
+      return false;
+    }
+    return true;
   }
 
   function toggleAuthModal(show) {
@@ -185,10 +242,35 @@ document.addEventListener("DOMContentLoaded", () => {
   async function fetchActivities() {
     try {
       const response = await fetch("/activities");
-      const activities = await response.json();
+      const payload = await response.json();
+      const activities = payload.activities || payload;
+      authEnabled =
+        typeof payload.auth_enabled === "boolean" ? payload.auth_enabled : true;
+
+      if (!authEnabled) {
+        if (authToken) {
+          clearAuthState();
+        }
+        showAppMessage(
+          "Teacher login is disabled until JWT_SECRET_KEY is set.",
+          "info"
+        );
+      } else if (
+        messageDiv.classList.contains("info") &&
+        messageDiv.textContent.includes("Teacher login is disabled")
+      ) {
+        hideAppMessage();
+      }
+
+      setAuthUI();
 
       // Clear loading message
       activitiesList.innerHTML = "";
+
+      // Reset dropdown to placeholder before repopulating (idempotent refresh)
+      while (activitySelect.options.length > 1) {
+        activitySelect.remove(1);
+      }
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -197,7 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft =
           details.max_participants - details.participants.length;
-        const isLoggedIn = Boolean(authToken);
+        const isLoggedIn = Boolean(authToken) && authEnabled;
 
         // Create activity name
         const nameHeading = document.createElement("h4");
@@ -281,7 +363,7 @@ document.addEventListener("DOMContentLoaded", () => {
         activitySelect.appendChild(option);
       });
 
-      if (authToken) {
+      if (authToken && authEnabled) {
         document.querySelectorAll(".delete-btn").forEach((button) => {
           button.addEventListener("click", handleUnregister);
         });
@@ -295,11 +377,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Handle unregister functionality
   async function handleUnregister(event) {
+    if (!authEnabled) {
+      showAppMessage(
+        "Teacher login is disabled until JWT_SECRET_KEY is set.",
+        "info"
+      );
+      return;
+    }
+
     if (!authToken) {
-      messageDiv.textContent = "Teacher login required to unregister students.";
-      messageDiv.classList.remove("success");
-      messageDiv.classList.add("error");
-      messageDiv.classList.remove("hidden");
+      showAppMessage("Teacher login required to unregister students.", "error");
+      return;
+    }
+
+    if (!ensureActiveSessionOrReset()) {
       return;
     }
 
@@ -322,30 +413,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const result = await response.json();
 
+      if (response.status === 401) {
+        clearAuthState();
+        showAppMessage("Session expired. Please log in again.", "error");
+        return;
+      }
+
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.classList.remove("error");
-        messageDiv.classList.add("success");
+        showAppMessage(result.message, "success");
 
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.classList.remove("success");
-        messageDiv.classList.add("error");
+        showAppMessage(result.detail || "An error occurred", "error");
       }
 
-      messageDiv.classList.remove("hidden");
-
       // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
+      scheduleMessageHide();
     } catch (error) {
-      messageDiv.textContent = "Failed to unregister. Please try again.";
-      messageDiv.classList.remove("success");
-      messageDiv.classList.add("error");
-      messageDiv.classList.remove("hidden");
+      showAppMessage("Failed to unregister. Please try again.", "error");
       console.error("Error unregistering:", error);
     }
   }
@@ -354,11 +440,20 @@ document.addEventListener("DOMContentLoaded", () => {
   signupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
 
+    if (!authEnabled) {
+      showAppMessage(
+        "Teacher login is disabled until JWT_SECRET_KEY is set.",
+        "info"
+      );
+      return;
+    }
+
     if (!authToken) {
-      messageDiv.textContent = "Teacher login required to register students.";
-      messageDiv.classList.remove("success");
-      messageDiv.classList.add("error");
-      messageDiv.classList.remove("hidden");
+      showAppMessage("Teacher login required to register students.", "error");
+      return;
+    }
+
+    if (!ensureActiveSessionOrReset()) {
       return;
     }
 
@@ -380,31 +475,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const result = await response.json();
 
+      if (response.status === 401) {
+        clearAuthState();
+        showAppMessage("Session expired. Please log in again.", "error");
+        return;
+      }
+
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.classList.remove("error");
-        messageDiv.classList.add("success");
+        showAppMessage(result.message, "success");
         signupForm.reset();
 
         // Refresh activities list to show updated participants
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.classList.remove("success");
-        messageDiv.classList.add("error");
+        showAppMessage(result.detail || "An error occurred", "error");
       }
 
-      messageDiv.classList.remove("hidden");
-
       // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
+      scheduleMessageHide();
     } catch (error) {
-      messageDiv.textContent = "Failed to sign up. Please try again.";
-      messageDiv.classList.remove("success");
-      messageDiv.classList.add("error");
-      messageDiv.classList.remove("hidden");
+      showAppMessage("Failed to sign up. Please try again.", "error");
       console.error("Error signing up:", error);
     }
   });
@@ -457,22 +547,46 @@ document.addEventListener("DOMContentLoaded", () => {
   logoutButton.addEventListener("click", async () => {
     hideAuthMessage();
 
+    if (!authEnabled) {
+      clearAuthState();
+      showAuthMessage("Logged out.");
+      fetchActivities();
+      return;
+    }
+
+    if (!authToken) {
+      clearAuthState();
+      showAuthMessage("Logged out.");
+      fetchActivities();
+      return;
+    }
+
+    if (isTokenExpired(authToken)) {
+      clearAuthState();
+      showAuthMessage("Session expired. Please log in again.", true);
+      fetchActivities();
+      return;
+    }
+
     try {
-      await fetch("/auth/logout", {
+      const response = await fetch("/auth/logout", {
         method: "POST",
         headers: {
           "X-Teacher-Token": authToken,
         },
       });
+
+      if (response.status === 401) {
+        clearAuthState();
+        showAuthMessage("Session expired. Please log in again.", true);
+        fetchActivities();
+        return;
+      }
     } catch (error) {
       console.error("Error logging out:", error);
     }
 
-    authToken = null;
-    authUser = null;
-    localStorage.removeItem("teacherToken");
-    localStorage.removeItem("teacherUser");
-    setAuthUI();
+    clearAuthState();
     showAuthMessage("Logged out.");
     fetchActivities();
   });

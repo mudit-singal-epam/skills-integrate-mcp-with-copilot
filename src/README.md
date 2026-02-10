@@ -5,7 +5,9 @@ A super simple FastAPI application that allows students to view and sign up for 
 ## Features
 
 - View all available extracurricular activities
-- Sign up for activities
+- Teacher login for admin actions
+- Teacher-only signup/unregister for students (when auth is enabled)
+- Read-only mode when `JWT_SECRET_KEY` is not set
 
 ## Getting Started
 
@@ -40,7 +42,7 @@ python -c 'import secrets; print(secrets.token_urlsafe(32))'
   $env:JWT_SECRET_KEY='your-generated-secret-key-here'
   ```
 
-**Note:** The application will fail to start if `JWT_SECRET_KEY` is not set. You'll see an error message with instructions on how to generate and set it.
+**Note:** If `JWT_SECRET_KEY` is not set, the application runs in read-only mode. Teacher login and admin actions (signup/unregister) return 503 until the key is configured.
 
 #### 2. Teacher Credentials File
 

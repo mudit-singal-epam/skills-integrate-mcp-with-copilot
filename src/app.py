@@ -156,11 +156,13 @@ teacher_credentials = load_teachers(teachers_path)
 # JWT configuration
 # JWT_SECRET_KEY must be set as an environment variable for secure token signing
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError(
-        "JWT_SECRET_KEY environment variable is required. "
-        "Please set it to a secure random string. "
-        "You can generate one using: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+AUTH_ENABLED = bool(SECRET_KEY)
+if not AUTH_ENABLED:
+    logger.warning(
+        "ADMIN AUTH DISABLED: JWT_SECRET_KEY is not set. "
+        "Unavailable services: /auth/login, /auth/logout, admin-protected signup/unregister. "
+        "Unavailable actions: teacher login/logout, student registration changes. "
+        "Risks: app is running in read-only mode for students; admin workflows will return 503 until configured."
     )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -247,6 +249,11 @@ revocation_manager = TokenRevocationManager()
 
 def require_teacher(token: str | None) -> tuple[str, str, int]:
     """Validate JWT token and return (username, jti, exp)."""
+    if not AUTH_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="Teacher authentication is disabled. Set JWT_SECRET_KEY to enable admin features."
+        )
     if not token:
         raise HTTPException(status_code=401, detail="Teacher login required")
     
@@ -341,11 +348,19 @@ def root():
 
 @app.get("/activities")
 def get_activities():
-    return activities
+    return {
+        "activities": activities,
+        "auth_enabled": AUTH_ENABLED
+    }
 
 
 @app.post("/auth/login")
 def login(request: LoginRequest):
+    if not AUTH_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="Teacher authentication is disabled. Set JWT_SECRET_KEY to enable admin features."
+        )
     # Retrieve the stored password hash for the username
     stored_password_hash = teacher_credentials.get(request.username)
     
@@ -384,6 +399,11 @@ def login(request: LoginRequest):
 
 @app.post("/auth/logout")
 def logout(token: str | None = Header(None, alias="X-Teacher-Token")):
+    if not AUTH_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="Teacher authentication is disabled. Set JWT_SECRET_KEY to enable admin features."
+        )
     # Validate the token and get the JTI and expiration time
     _, jti, exp_time = require_teacher(token)
     
