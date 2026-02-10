@@ -70,36 +70,79 @@ document.addEventListener("DOMContentLoaded", () => {
           details.max_participants - details.participants.length;
         const isLoggedIn = Boolean(authToken);
 
-        // Create participants HTML with delete icons instead of bullet points
-        const participantsHTML =
-          details.participants.length > 0
-            ? `<div class="participants-section">
-              <h5>Participants:</h5>
-              <ul class="participants-list">
-                ${details.participants
-                  .map(
-                    (email) =>
-                      `<li><span class="participant-email">${email}</span>${
-                        isLoggedIn
-                          ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>`
-                          : ""
-                      }</li>`
-                  )
-                  .join("")}
-              </ul>
-            </div>`
-            : `<p><em>No participants yet</em></p>`;
+        // Create activity name
+        const nameHeading = document.createElement("h4");
+        nameHeading.textContent = name;
+        activityCard.appendChild(nameHeading);
 
-        activityCard.innerHTML = `
-          <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
-          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
-          <div class="participants-container">
-            ${participantsHTML}
-          </div>
-        `;
+        // Create description
+        const descriptionPara = document.createElement("p");
+        descriptionPara.textContent = details.description;
+        activityCard.appendChild(descriptionPara);
 
+        // Create schedule
+        const schedulePara = document.createElement("p");
+        const scheduleStrong = document.createElement("strong");
+        scheduleStrong.textContent = "Schedule: ";
+        schedulePara.appendChild(scheduleStrong);
+        schedulePara.appendChild(document.createTextNode(details.schedule));
+        activityCard.appendChild(schedulePara);
+
+        // Create availability
+        const availabilityPara = document.createElement("p");
+        const availabilityStrong = document.createElement("strong");
+        availabilityStrong.textContent = "Availability: ";
+        availabilityPara.appendChild(availabilityStrong);
+        availabilityPara.appendChild(document.createTextNode(`${spotsLeft} spots left`));
+        activityCard.appendChild(availabilityPara);
+
+        // Create participants container
+        const participantsContainer = document.createElement("div");
+        participantsContainer.className = "participants-container";
+
+        if (details.participants.length > 0) {
+          const participantsSection = document.createElement("div");
+          participantsSection.className = "participants-section";
+
+          const participantsHeading = document.createElement("h5");
+          participantsHeading.textContent = "Participants:";
+          participantsSection.appendChild(participantsHeading);
+
+          const participantsList = document.createElement("ul");
+          participantsList.className = "participants-list";
+
+          details.participants.forEach((email) => {
+            const listItem = document.createElement("li");
+            
+            const emailSpan = document.createElement("span");
+            emailSpan.className = "participant-email";
+            emailSpan.textContent = email;
+            listItem.appendChild(emailSpan);
+
+            if (isLoggedIn) {
+              const deleteButton = document.createElement("button");
+              deleteButton.className = "delete-btn";
+              deleteButton.setAttribute("data-activity", name);
+              deleteButton.setAttribute("data-email", email);
+              deleteButton.setAttribute("aria-label", `Unregister ${email} from ${name}`);
+              deleteButton.textContent = "❌";
+              listItem.appendChild(deleteButton);
+            }
+
+            participantsList.appendChild(listItem);
+          });
+
+          participantsSection.appendChild(participantsList);
+          participantsContainer.appendChild(participantsSection);
+        } else {
+          const noParticipantsPara = document.createElement("p");
+          const emElement = document.createElement("em");
+          emElement.textContent = "No participants yet";
+          noParticipantsPara.appendChild(emElement);
+          participantsContainer.appendChild(noParticipantsPara);
+        }
+
+        activityCard.appendChild(participantsContainer);
         activitiesList.appendChild(activityCard);
 
         // Add option to select dropdown
