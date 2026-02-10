@@ -9,11 +9,13 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
 import secrets
-from typing import Dict
+from typing import Dict, Optional
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -41,12 +43,33 @@ def load_teachers(path: Path) -> Dict[str, str]:
 
 teachers_path = current_dir / "teachers.json"
 teacher_credentials = load_teachers(teachers_path)
-active_sessions: Dict[str, str] = {}
+
+# JWT configuration
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY", secrets.token_urlsafe(32))
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
-def require_teacher(token: str | None) -> None:
-    if not token or token not in active_sessions:
+def require_teacher(token: str | None) -> str:
+    """Validate JWT token and return username."""
+    if not token:
         raise HTTPException(status_code=401, detail="Teacher login required")
+    
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        exp: Optional[int] = payload.get("exp")
+        
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # JWT library validates expiration automatically, but we check explicitly for clarity
+        if exp and datetime.utcfromtimestamp(exp) < datetime.utcnow():
+            raise HTTPException(status_code=401, detail="Token expired")
+            
+        return username
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 # In-memory activity database
 activities = {
@@ -129,15 +152,21 @@ def login(request: LoginRequest):
     if not expected_password or expected_password != request.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = secrets.token_urlsafe(32)
-    active_sessions[token] = request.username
+    # Create JWT token with expiration
+    expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.utcnow() + expires_delta
+    to_encode = {"sub": request.username, "exp": expire}
+    token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    
     return {"token": token, "username": request.username}
 
 
 @app.post("/auth/logout")
 def logout(token: str | None = Header(None, alias="X-Teacher-Token")):
+    # Validate the token is legitimate before allowing logout
     require_teacher(token)
-    active_sessions.pop(token, None)
+    # With stateless JWT, we don't need to track sessions server-side
+    # The token will expire naturally based on its exp claim
     return {"message": "Logged out"}
 
 
