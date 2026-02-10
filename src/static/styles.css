@@ -251,6 +251,10 @@ button:hover {
   z-index: 10;
 }
 
+.modal.hidden {
+  display: none;
+}
+
 .modal-content {
   background-color: #fff;
   border-radius: 8px;
@@ -258,6 +262,42 @@ button:hover {
   width: 100%;
   max-width: 420px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #1a237e;
+}
+
+.modal-close-button {
+  background: none;
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.modal-close-button:hover {
+  background-color: #f5f5f5;
+  color: #333;
 }
 
 #auth-message {
