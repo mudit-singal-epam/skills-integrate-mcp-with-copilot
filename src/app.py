@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import secrets
+import threading
 from pathlib import Path
 from typing import Dict, Set
 
@@ -56,9 +57,21 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# In-memory storage for revoked token JTIs (JWT IDs)
-# In production, this should be stored in Redis or a database
-revoked_tokens: Set[str] = set()
+# In-memory storage for revoked token JTIs with expiration times
+# In production, this should be stored in Redis or a database with TTL
+# Structure: {jti: expiration_timestamp}
+revoked_tokens: Dict[str, int] = {}
+revoked_tokens_lock = threading.Lock()  # Thread-safe access to revoked_tokens
+
+
+def cleanup_expired_tokens():
+    """Remove expired token JTIs from the revoked set to prevent memory growth."""
+    now = int(datetime.now(timezone.utc).timestamp())
+    with revoked_tokens_lock:
+        # Remove all tokens whose expiration time has passed
+        expired_jtis = [jti for jti, exp_time in revoked_tokens.items() if exp_time < now]
+        for jti in expired_jtis:
+            del revoked_tokens[jti]
 
 
 def require_teacher(token: str | None) -> tuple[str, str]:
@@ -74,9 +87,15 @@ def require_teacher(token: str | None) -> tuple[str, str]:
         if username is None or jti is None:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Check if token has been revoked
-        if jti in revoked_tokens:
-            raise HTTPException(status_code=401, detail="Token has been revoked")
+        # Periodically clean up expired tokens to prevent unbounded memory growth
+        # Do this opportunistically during token validation (1% probability)
+        if secrets.randbelow(100) == 0:
+            cleanup_expired_tokens()
+        
+        # Check if token has been revoked (thread-safe)
+        with revoked_tokens_lock:
+            if jti in revoked_tokens:
+                raise HTTPException(status_code=401, detail="Token has been revoked")
             
         return username, jti
     except JWTError:
@@ -178,8 +197,13 @@ def logout(token: str | None = Header(None, alias="X-Teacher-Token")):
     # Validate the token and get the JTI
     username, jti = require_teacher(token)
     
-    # Add the token's JTI to the revoked set
-    revoked_tokens.add(jti)
+    # Decode the token to get the expiration time
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    exp_time = payload.get("exp")
+    
+    # Add the token's JTI to the revoked set with its expiration time (thread-safe)
+    with revoked_tokens_lock:
+        revoked_tokens[jti] = exp_time
     
     return {"message": "Logged out successfully"}
 
