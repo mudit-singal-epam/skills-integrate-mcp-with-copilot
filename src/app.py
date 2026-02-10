@@ -84,7 +84,7 @@ def require_teacher(token: str | None) -> tuple[str, str, int]:
         # Check if token has been revoked (thread-safe)
         with revoked_tokens_lock:
             if jti in revoked_tokens:
-                raise HTTPException(status_code=401, detail="Token has been revoked")
+                raise HTTPException(status_code=401, detail="Invalid token")
             
             # Periodically clean up expired tokens to prevent unbounded memory growth
             # Use counter-based approach: cleanup every 100 requests
