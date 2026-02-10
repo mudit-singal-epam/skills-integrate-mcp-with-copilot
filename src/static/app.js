@@ -12,8 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const logoutButton = document.getElementById("logout-button");
   const authMessage = document.getElementById("auth-message");
 
-  let authToken = localStorage.getItem("teacherToken");
-  let authUser = localStorage.getItem("teacherUser");
+  let authToken = null;
+  let authUser = null;
 
   function setAuthUI() {
     const isLoggedIn = Boolean(authToken);
