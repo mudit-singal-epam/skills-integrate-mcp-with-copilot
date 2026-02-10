@@ -81,7 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Focus trap: keep focus within modal
     if (event.key === "Tab") {
       const focusableElements = authModal.querySelectorAll(
-        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       );
       const visibleFocusableElements = Array.from(focusableElements).filter(
         (el) => !el.closest(".hidden") && el.offsetParent !== null
