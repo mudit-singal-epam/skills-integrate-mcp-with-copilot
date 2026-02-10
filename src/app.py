@@ -200,19 +200,13 @@ class TokenRevocationManager:
             with cls._lock:
                 # Double-checked locking to prevent race conditions
                 if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
+                    instance = super().__new__(cls)
+                    # Initialize instance attributes while holding the lock
+                    instance._revoked_tokens = {}
+                    instance._cleanup_counter = 0
+                    instance._cleanup_threshold = 100  # Cleanup every N checks
+                    cls._instance = instance
         return cls._instance
-    
-    def __init__(self):
-        """Initialize the revocation manager (only once)."""
-        if self._initialized:
-            return
-        
-        self._revoked_tokens: Dict[str, int] = {}
-        self._cleanup_counter = 0
-        self._cleanup_threshold = 100  # Cleanup every N checks
-        self._initialized = True
     
     def is_revoked(self, jti: str) -> bool:
         """
