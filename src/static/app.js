@@ -18,29 +18,29 @@ document.addEventListener("DOMContentLoaded", () => {
   // Decode JWT payload to check expiration (without verification)
   function decodeJWT(token) {
     try {
-      const parts = token.split('.');
+      const parts = token.split(".");
       if (parts.length !== 3) return null;
       
       // Decode base64url payload
       const payload = parts[1];
-      let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      let base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
       
       // Add padding if needed (JWT payloads are typically unpadded)
       const padding = base64.length % 4;
       if (padding > 0) {
-        base64 += '='.repeat(4 - padding);
+        base64 += "=".repeat(4 - padding);
       }
       
       const jsonPayload = decodeURIComponent(
         atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
+          .split("")
+          .map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
       );
       
       return JSON.parse(jsonPayload);
     } catch (error) {
-      console.error('Failed to decode JWT:', error);
+      console.error("Failed to decode JWT:", error);
       return null;
     }
   }
@@ -66,8 +66,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize auth state from localStorage, if available and not expired
   try {
-    const storedToken = window.localStorage.getItem("teacherToken");
-    const storedUser = window.localStorage.getItem("teacherUser");
+    const storedToken = localStorage.getItem("teacherToken");
+    const storedUser = localStorage.getItem("teacherUser");
     
     if (storedToken && storedUser) {
       if (!isTokenExpired(storedToken)) {
@@ -75,17 +75,17 @@ document.addEventListener("DOMContentLoaded", () => {
         authUser = storedUser;
       } else {
         // Token expired, clear localStorage
-        window.localStorage.removeItem("teacherToken");
-        window.localStorage.removeItem("teacherUser");
+        localStorage.removeItem("teacherToken");
+        localStorage.removeItem("teacherUser");
       }
     } else if (storedToken || storedUser) {
       // Inconsistent auth state, clear both entries to keep storage consistent
-      window.localStorage.removeItem("teacherToken");
-      window.localStorage.removeItem("teacherUser");
+      localStorage.removeItem("teacherToken");
+      localStorage.removeItem("teacherUser");
     }
   } catch (e) {
     // If accessing localStorage fails (e.g., disabled), start with no auth state
-    console.error('Failed to restore auth state:', e);
+    console.error("Failed to restore auth state:", e);
   }
 
   function setAuthUI() {
