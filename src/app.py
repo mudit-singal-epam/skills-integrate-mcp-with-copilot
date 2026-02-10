@@ -15,6 +15,8 @@ from passlib.context import CryptContext
 import json
 import logging
 import os
+import secrets
+import threading
 from pathlib import Path
 from typing import Dict
 
@@ -162,20 +164,48 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+# In-memory storage for revoked token JTIs with expiration times
+# In production, this should be stored in Redis or a database with TTL
+# Structure: {jti: expiration_timestamp} where expiration_timestamp is Unix epoch time in seconds
+revoked_tokens: Dict[str, int] = {}
+revoked_tokens_lock = threading.Lock()  # Thread-safe access to revoked_tokens
+cleanup_counter = 0  # Counter for periodic cleanup (thread-safe via lock)
 
-def require_teacher(token: str | None) -> str:
-    """Validate JWT token and return username."""
+
+def require_teacher(token: str | None) -> tuple[str, str, int]:
+    """Validate JWT token and return (username, jti, exp)."""
+    global cleanup_counter
+    
     if not token:
         raise HTTPException(status_code=401, detail="Teacher login required")
     
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        jti: str = payload.get("jti")
+        exp: int = payload.get("exp")
         
-        if username is None:
+        if username is None or jti is None or exp is None:
             raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Check if token has been revoked (thread-safe)
+        with revoked_tokens_lock:
+            if jti in revoked_tokens:
+                raise HTTPException(status_code=401, detail="Invalid token")
             
-        return username
+            # Periodically clean up expired tokens to prevent unbounded memory growth
+            # Use counter-based approach: cleanup every 100 requests
+            # Counter is incremented inside lock to ensure thread-safety
+            cleanup_counter += 1
+            if cleanup_counter >= 100:
+                cleanup_counter = 0
+                # Cleanup also happens inside lock to prevent multiple simultaneous cleanups
+                now = int(datetime.now(timezone.utc).timestamp())
+                expired = [j for j, e in revoked_tokens.items() if e <= now]
+                for j in expired:
+                    del revoked_tokens[j]
+            
+        return username, jti, exp
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -275,10 +305,11 @@ def login(request: LoginRequest):
     if not stored_password_hash or not is_valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Create JWT token with expiration
+    # Create JWT token with expiration and unique JTI
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     expire = datetime.now(timezone.utc) + expires_delta
-    to_encode = {"sub": request.username, "exp": int(expire.timestamp())}
+    jti = secrets.token_urlsafe(32)  # Generate unique token ID
+    to_encode = {"sub": request.username, "exp": int(expire.timestamp()), "jti": jti}
     token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
     return {"token": token, "username": request.username}
@@ -286,11 +317,14 @@ def login(request: LoginRequest):
 
 @app.post("/auth/logout")
 def logout(token: str | None = Header(None, alias="X-Teacher-Token")):
-    # Validate the token is legitimate before allowing logout
-    require_teacher(token)
-    # With stateless JWT, we don't need to track sessions server-side
-    # The token will expire naturally based on its exp claim
-    return {"message": "Logged out"}
+    # Validate the token and get the JTI and expiration time
+    _, jti, exp_time = require_teacher(token)
+    
+    # Add the token's JTI to the revoked set with its expiration time (thread-safe)
+    with revoked_tokens_lock:
+        revoked_tokens[jti] = exp_time
+    
+    return {"message": "Logged out successfully"}
 
 
 @app.post("/activities/{activity_name}/signup")
@@ -300,7 +334,7 @@ def signup_for_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Sign up a student for an activity"""
-    require_teacher(token)
+    _, _, _ = require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -327,7 +361,7 @@ def unregister_from_activity(
     token: str | None = Header(None, alias="X-Teacher-Token")
 ):
     """Unregister a student from an activity"""
-    require_teacher(token)
+    _, _, _ = require_teacher(token)
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
