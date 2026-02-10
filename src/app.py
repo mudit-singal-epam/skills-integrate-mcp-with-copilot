@@ -20,7 +20,7 @@ from typing import Dict
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
 
-# Configure logging
+# Module-level logger
 logger = logging.getLogger(__name__)
 
 # Mount the static files directory
@@ -37,9 +37,10 @@ class LoginRequest(BaseModel):
 def load_teachers(path: Path) -> Dict[str, str]:
     if not path.exists():
         logger.warning(
-            f"Teacher credentials file not found at {path}. "
+            "Teacher credentials file not found at %s. "
             "All teacher login attempts will fail. "
-            "Please create the file with valid teacher credentials to enable admin functionality."
+            "Please create the file with valid teacher credentials to enable admin functionality.",
+            path
         )
         return {}
 
@@ -50,9 +51,10 @@ def load_teachers(path: Path) -> Dict[str, str]:
         # Validate that data is a list
         if not isinstance(data, list):
             logger.warning(
-                f"Teacher credentials file at {path} has invalid structure (expected a list, got {type(data).__name__}). "
+                "Teacher credentials file at %s has invalid structure (expected a list, got %s). "
                 "All teacher login attempts will fail. "
-                "Please ensure the file contains a JSON array of teacher credentials."
+                "Please ensure the file contains a JSON array of teacher credentials.",
+                path, type(data).__name__
             )
             return {}
         
@@ -61,30 +63,53 @@ def load_teachers(path: Path) -> Dict[str, str]:
         for entry in data:
             if not isinstance(entry, dict):
                 logger.warning(
-                    f"Teacher credentials file at {path} contains invalid entry (expected dict, got {type(entry).__name__}). "
-                    "Skipping invalid entry."
+                    "Teacher credentials file at %s contains invalid entry (expected dict, got %s). "
+                    "Skipping invalid entry.",
+                    path, type(entry).__name__
                 )
                 continue
             if "username" not in entry or "password" not in entry:
                 logger.warning(
-                    f"Teacher credentials file at {path} contains entry missing required fields (username and/or password). "
-                    "Skipping invalid entry."
+                    "Teacher credentials file at %s contains entry missing required fields (username and/or password). "
+                    "Skipping invalid entry.",
+                    path
                 )
                 continue
-            credentials[entry["username"]] = entry["password"]
+            
+            # Validate that username and password are non-empty strings
+            username = entry["username"]
+            password = entry["password"]
+            if not isinstance(username, str) or not isinstance(password, str):
+                logger.warning(
+                    "Teacher credentials file at %s contains entry with non-string username or password (username type: %s, password type: %s). "
+                    "Skipping invalid entry.",
+                    path, type(username).__name__, type(password).__name__
+                )
+                continue
+            if not username or not password:
+                logger.warning(
+                    "Teacher credentials file at %s contains entry with empty username or password. "
+                    "Skipping invalid entry.",
+                    path
+                )
+                continue
+            
+            credentials[username] = password
         
         return credentials
     except json.JSONDecodeError as e:
         logger.warning(
-            f"Teacher credentials file at {path} is malformed and cannot be parsed: {e}. "
+            "Teacher credentials file at %s is malformed and cannot be parsed: %s. "
             "All teacher login attempts will fail. "
-            "Please fix the JSON syntax to enable admin functionality."
+            "Please fix the JSON syntax to enable admin functionality.",
+            path, e
         )
         return {}
-    except Exception as e:
-        logger.warning(
-            f"Failed to load teacher credentials from {path}: {e}. "
-            "All teacher login attempts will fail."
+    except Exception:
+        logger.exception(
+            "Failed to load teacher credentials from %s. "
+            "All teacher login attempts will fail.",
+            path
         )
         return {}
 
